@@ -1,0 +1,100 @@
+SELECT EV200_EVENT_MASTER.EV200_EVT_ID as 'Event ID', cast(convert(varchar,EV200_EVENT_MASTER.EV200_EVT_START_DATE,1) as datetime) as 'Cruise Date', CruiseTypeName, TypeCategory,ev550_evt_rank_desc as 'Rank',
+EV200_EVENT_MASTER.EV200_EVT_DESC as 'Cruise Description', EV200_EVENT_MASTER.EV200_EVT_CATEGORY,
+ EV200_EVENT_MASTER.EV200_ORG_CODE, EV200_EVENT_MASTER.EV200_EVT_CLASS as 'Event Class',
+ EV200_EVENT_MASTER.EV200_PLN_ATTEND, ER100_ORD_NBR as 'Order Number',cast(convert(varchar,ER100_ORD_DATE,1) as datetime) as 'Order Date',ER100_ORD_TOT as 'Order Total',isnull(x.Taxes,0) as 'Taxes',
+ER100_ORD_TOT - isnull(x.Taxes,0) as 'Presold + Fees',ER100_FC_ACT_PAYMENTS as 'Paid to Date',ER100_ORD_TOT - ER100_FC_ACT_PAYMENTS as 'Balance Due',
+isnull(cast(CONVERT(VARCHAR,Act.ActDate,1) as datetime),cast(convert(varchar,ER100_ORD_DATE,1) as datetime)) as 'Confirmed Date',
+case when datepart(weekday,isnull(cast(CONVERT(VARCHAR,Act.ActDate,1) as datetime),cast(convert(varchar,ER100_ORD_DATE,1) as datetime))) = 1 then isnull(cast(CONVERT(VARCHAR,Act.ActDate,1) as datetime),cast(convert(varchar,ER100_ORD_DATE,1) as datetime)) else
+DATEADD(DAY, 8 - DATEPART(WEEKDAY, isnull(cast(CONVERT(VARCHAR,Act.ActDate,1) as datetime),cast(convert(varchar,ER100_ORD_DATE,1) as datetime))), isnull(cast(CONVERT(VARCHAR,Act.ActDate,1) as datetime),cast(convert(varchar,ER100_ORD_DATE,1) as datetime))) end as 'Week Ending Date',
+case when year(EV200_EVENT_MASTER.EV200_EVT_START_DATE) =2019 and charindex('Charter',CruiseTypeName) > 0and EV200_FIRM_DATE <= getdate()-364 then 'Yes'
+when year(EV200_EVENT_MASTER.EV200_EVT_START_DATE) =2019 and charindex('Concert',CruiseTypeName) > 0and EV200_FIRM_DATE <= getdate()-364 then 'Yes'
+when year(EV200_EVENT_MASTER.EV200_EVT_START_DATE) =2019 and charindex('Entertain',CruiseTypeName) > 0and EV200_FIRM_DATE <= getdate()-364 then 'Yes'
+when  year(EV200_EVENT_MASTER.EV200_EVT_START_DATE) =2019 and charindex('Charter',CruiseTypeName) = 0 and convert(varchar,ER100_ORD_DATE,1)  <= getdate() - 364 then 'Yes'
+when year(EV200_EVENT_MASTER.EV200_EVT_START_DATE) = 2020 and  ER099_STS_DESC in ('Active','Closed') then 'Yes'
+else 'No' end as 'As of Revenue',
+ 
+EV870_ACCT_MASTER_SLSPR.EV870_LAST_NAME,
+case when charindex('New York',EV205_EVT_CATEGORY.EV205_EVT_CAT_DESC)> 0 then 'New York'
+when EV205_EVT_CATEGORY.EV205_EVT_CAT_DESC in ('Long Beach','Marina Del Rey','Newport Beach') then 'Greater Los Angeles'
+when EV205_EVT_CATEGORY.EV205_EVT_CAT_DESC in ('Berkeley','Sacramento') or charindex('Francisco',EV205_EVT_CATEGORY.EV205_EVT_CAT_DESC) > 0 then 'Northern California'
+else EV205_EVT_CATEGORY.EV205_EVT_CAT_DESC end as 'Metro',
+EV205_EVT_CATEGORY.EV205_EVT_CAT_DESC as 'Port',
+ EV200_EVENT_MASTER.EV200_FIRM_DATE, EV200_EVENT_MASTER.EV200_ANCHOR_VENUE,
+  EV130_STATUS_MASTER.EV130_STATUS_CODE, EV130_STATUS_MASTER.EV130_STATUS_DESC,CRPRE_ACCT_CATEGORY as 'Market Segment',CRPRE_ACCT_CAT_DESC as 'Market Code',
+DisplayName AS 'Order Rep',
+  month(EV200_EVT_START_DATE) as 'Cruise Month',
+  year(EV200_EVT_START_DATE) as 'Cruise Year',ER099_STS_DESC as 'Order Status',
+case when  ((EV200_EVENT_MASTER.EV200_EVT_CLASS  = 'IDC' OR EV200_EVENT_MASTER.EV200_EVT_CLASS  = 'SIGHT' OR EV200_EVENT_MASTER.EV200_EVT_CLASS  = 'SPEC')
+and cast(convert(varchar,EV200_EVENT_MASTER.EV200_EVT_START_DATE,1) as datetime) >= '06/24/2019'
+)
+then 'No' else 'Yes' end as 'Reportable Revenue'
+ 
+FROM   EV870_ACCT_MASTER EV870_ACCT_MASTER_SLSPR
+ LEFT OUTER JOIN dbo.EV200_EVENT_MASTER EV200_EVENT_MASTER
+  ON EV870_ACCT_MASTER_SLSPR.EV870_ACCT_CODE=EV200_EVENT_MASTER.EV200_SLSPER
+  AND EV870_ACCT_MASTER_SLSPR.EV870_ORG_CODE=EV200_EVENT_MASTER.EV200_ORG_CODE
+  LEFT OUTER JOIN dbo.EV870_ACCT_MASTER EV870_ACCT_MASTER_COOR
+   ON EV200_EVENT_MASTER.EV200_COORD_1=EV870_ACCT_MASTER_COOR.EV870_ACCT_CODE
+   AND EV200_EVENT_MASTER.EV200_ORG_CODE=EV870_ACCT_MASTER_COOR.EV870_ORG_CODE
+Left JOIN EV130_STATUS_MASTER EV130_STATUS_MASTER
+  ON EV200_EVENT_MASTER.EV200_EVT_STATUS=EV130_STATUS_MASTER.EV130_STATUS_CODE
+ 
+Left JOIN dbo.EV205_EVT_CATEGORY EV205_EVT_CATEGORY
+    ON (EV200_EVENT_MASTER.EV200_EVT_CATEGORY=EV205_EVT_CATEGORY.EV205_EVT_CATEGORY)
+AND (EV200_EVENT_MASTER.EV200_ORG_CODE=EV205_EVT_CATEGORY.EV205_ORG_CODE)
+Left Join crpre_acct_category ON CRPRE_ACCT_CATEGORY = EV870_ACCT_MASTER_SLSPR.ev870_mkt_seg_2
+ 
+Left JOIN dbo.ER100_ACCT_ORDER ER100_ACCT_ORDER
+   ON (ER100_EVT_ID = EV200_EVT_ID)
+ 
+Left JOIN (SELECT ev215_evt_type,ev215_org_code,ev215_evt_typ_desc AS TypeName,
+                              ev215_evt_typ_desc_alt1 AS CruiseTypeName,ev215_evt_typ_desc_alt5 AS TypeCategory
+                              FROM ev215_evt_type WITH (NOLOCK)) EvtType
+               ON ev215_evt_type=ev200_evt_type AND ev215_org_code=ev200_org_code
+ 
+ 
+Left JOIN (SELECT ER101_ORD_NBR
+                                                           
+                                                                           , sum(ER101_EXT_COST) as 'Taxes'
+                                                           
+                     FROM   ER101_ACCT_ORDER_DTL
+                     WHERE  charindex('Tax',ER101_DESC) <> 0
+                                                                           and ER101_GL_REF_TRANS = 'N'
+                     and ER101_EXT_COST <> 0
+                     and ER101_PHASE = 1
+                                                                           Group By ER101_ORD_NBR
+                                                                           )   
+                  x ON ER101_ORD_NBR = ER100_ORD_NBR
+LEFT JOIN (SELECT mm999_ord_nbr,
+           MAX(CONVERT(DATETIME, CONVERT(VARCHAR(20),mm999_chg_stamp))) AS ActDate
+           FROM mm999_audit_log WITH (NOLOCK)
+           WHERE mm999_trans_class='OR' AND mm999_trans_type='CHGSTS'
+           AND mm999_text_to IN ('A','C') GROUP BY mm999_ord_nbr) AS Act
+     ON mm999_ord_nbr=ER100_ORD_NBR
+ 
+Left Join dbo.ER099_ORD_STATUS ER099_ORD_STATUS With(NOLOCK)
+on ER099_ORD_STS = ER100_NEW_STS
+                                                             
+LEFT JOIN ev550_evt_rank WITH (NOLOCK)
+ 
+ON ev550_evt_rank=ev200_evt_rank    
+ 
+LEFT JOIN (SELECT ev870_acct_code,ev870_org_code,ev870_prs_dept,ev870_prs_position,
+                              (ev870_first_name+' '+ev870_last_name) AS DisplayName,ev065_dept_desc AS SalesDept
+                              FROM ev870_acct_master WITH (NOLOCK)
+                              JOIN ev065_dept_master WITH (NOLOCK)
+                                             ON ev065_dept_code=ev870_prs_dept AND ev065_org_code=ev870_org_code
+                              WHERE ev870_pers_desig<>'0' OR ev870_acct_code='WEBUSER') SalesRep
+               ON SalesRep.ev870_acct_code=er100_ord_acct_rep AND SalesRep.ev870_org_code=er100_org_code              
+ 
+ 
+ 
+                
+ 
+ 
+ 
+ 
+WHERE 
+ 
+year(EV200_EVENT_MASTER.EV200_EVT_START_DATE) in (2019,2020)
+and ER100_ORD_TOT <> 
