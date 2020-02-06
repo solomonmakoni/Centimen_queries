@@ -1,0 +1,200 @@
+USE [Centaman_LIVE]
+GO
+/****** Object:  StoredProcedure [dbo].[HBCE_Custom_GPExport]    Script Date: 2/6/2020 7:53:20 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ 
+ 
+ 
+-- =============================================
+-- Author:        Centaman Inc
+-- Modify date:   November 20th 2019
+-- =============================================
+ALTER PROCEDURE [dbo].[HBCE_Custom_GPExport]
+@from date, @to date, @bookingid int=0
+ 
+ 
+AS
+BEGIN
+SET NOCOUNT ON;
+ 
+ 
+SELECT
+T.FinancialReportCategoryCode As FinancialReportCategoryCode
+,T.FinancialReportCategoryDescription As FinancialReportCategoryDescription
+,T.FinancialReportGroupCode As FinancialReportGroup
+,SUBSTRING(T.FinancialReportCategoryCode,1,3) As GPSeg1_Entity
+,SUBSTRING(T.FinancialReportCategoryCode,5,3) As GPSeg3_Dept
+ 
+,SUBSTRING(T.FinancialReportCategoryCode,9,5) As GPSeg2_GL
+ 
+,SUBSTRING(T.FinancialReportCategoryCode,15,3) As GPSeg4_RevType
+,SUBSTRING(T.FinancialReportCategoryCode,19,3) As GPSeg5_Location
+,'' As GPSeg6_Vessel
+,'' As GPSeg7_Project
+,case when Sum( Credit)<=Sum( Debit) then Sum( Debit)-Sum( Credit) else 0 end As TotalDebits
+,case when Sum( Credit)>Sum( Debit) then Sum( Credit)-Sum( Debit) else 0 end As TotalCredits
+,Sum( Credit)-Sum( Debit) as Net
+ 
+ 
+,SUBSTRING(T.FinancialReportCategoryCode,1,3)+ '-'+
+SUBSTRING(T.FinancialReportCategoryCode,5,3)+'-'+
+SUBSTRING(T.FinancialReportCategoryCode,9,5)+'-'+
+SUBSTRING(T.FinancialReportCategoryCode,15,3)+'-'
++ SUBSTRING(T.FinancialReportCategoryCode,19,3)
+ As GPWholeString
+,case when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '661' then 'Berkley'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '662' then 'San Francisco Belle'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '663' then 'Newport Beach-Long Beach'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '665' then 'Marina Del Rey'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3)= '667'then 'Sacramento'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3)= '668' then 'San Diego'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '669' then 'San Francisco'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '715' then 'Pier 15'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '740' then 'Pier 40'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3)= '778' then 'Pier 78'
+else 'Other'
+end as 'Port'
+,case when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '661' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3)= '667' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '662' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '669' then 'NorCal'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '663' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '665' then 'GLA'
+  when SUBSTRING(T.FinancialReportCategoryCode,15,3)= '668' then 'San Diego'
+when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '715' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '740' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3)= '778' then 'New York'
+else 'Other'
+end as 'Metro'
+,case when SUBSTRING(T.FinancialReportCategoryCode,5,3) = '002' then 'IDC'
+when SUBSTRING(T.FinancialReportCategoryCode,5,3) = '003' then 'Sightseeing'
+else 'Other' end as 'Category'
+,case when SUBSTRING(T.FinancialReportCategoryCode,15,3) = '661' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3)= '667' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '662' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '669' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '663' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '665' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '668' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '715' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3) = '740' or
+  SUBSTRING(T.FinancialReportCategoryCode,15,3)= '778' then 'HB'
+else 'EC'
+end as 'Legacy Company'
+ 
+ 
+,isnull(b.bking_id,0) as BookingID
+  ,isnull(tl.bking_id,0) as Current_TourEventID
+  ,datepart(year,b.start_date) as CruiseYear
+,datepart(month,b.start_date) as CruisePeriod
+,convert(date, b.start_date) as EventDate
+ 
+,convert(date,t.RevenueDate) as RevenueDate
+  ,datepart(month,t.RevenueDate) as RevenueMonth
+  ,datepart(year, t.RevenueDate)as RevenueYear
+,convert(date,t.TransactionDate) as TransactionDate
+ 
+,t.ItemId
+  ,t.ItemCode, t.ItemDescription
+                    ,t.ReceiptNo, t.NodeNo
+                    ,t.UserName
+ 
+                    ,case when isnull(sh.buttontype,0)=4 then  case when isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1 then 'CreditCard' else
+                           case when isnull(sh.invoice,0)=1 then 'Invoice' else case when isnull(sh.cashless,0)=1 or isnull(sh.cashlesstender,0)=1 then 'Giftcard' else 'Other'
+                           end end end
+                           else '' end
+                           as PaymentMethod
+                           ,case when isnull(sh.buttontype,0)=4 and (isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1) then ccdata.InvoiceNo else '' end as CreditCardRef
+                           ,case when isnull(sh.buttontype,0)=4 and (isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1)  then CCData.CardType else '' end  as CardType
+                           ,case when isnull(sh.buttontype,0)=4 and (isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1)  then CCData.ReceiptText else '' end  as CCLast4
+                           ,case when isnull(sh.buttontype,0)=4 and (isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1)  then ccdata.AuthCode else '' end  as CCAuthCode
+,t.InvoiceNo as InvoiceId
+,isnull(di.purchorder,'') as InvoiceRef
+,isnull(di.notes,'') as InvoiceNotes
+ 
+,case when isnull(b.bking_id,0)=0 and FinancialReportGroupCode not like  '%Tender%'
+       then case when FinancialReportGroupCode  like  '%Rev%' then  'Non-booking Revenue' else 'Non-booking Liability' end
+       else
+             case when convert(date, b.start_date)<>convert(date, t.RevenueDate) and FinancialReportGroupCode like '%Rev%'
+             then 'Booking revenue not on Event date'
+             else
+                    case when FinancialReportGroupCode not like '%Tender%' 
+                    and convert(date,t.TransactionDate)<convert(date, t.RevenueDate) 
+                    and datediff(dd,b.start_date,convert(date, t.RevenueDate))=0
+                    then
+                           'OK - Revenue from Prepayment'
+                           else
+                    case when FinancialReportGroupCode not like '%Tender%' and FinancialReportGroupCode not like '%Rev%' and convert(date, t.RevenueDate) < b.start_date
+                    then
+                           'OK - Prepayment for Future Event'
+else   case when FinancialReportGroupCode like '%Tender%'  and convert(date,t.TransactionDate)=convert(date, t.RevenueDate)
+                    then
+                           'OK - Tender Payment'
+ 
+                    else 'OK - Day of Event Revenue'
+                    end end       end end end   as AuditReview
+ 
+ 
+ 
+FROM TRANSACTIONS t
+ 
+left join booking b on t.BookingNo=b.bking_id
+ 
+left join tourlink tl on b.bking_id=tl.linkid
+left join stokhdr sh on sh.ucode=t.ItemId
+ 
+left join (
+select a.nodeno, a.receiptno, a.trandate, c.cardtype, c.invoiceno, c.receipttext, c.authcode
+from creditcardtransactions c
+inner join
+(select
+min(cctid) As Autoid,
+nodeno,
+ReceiptNo
+,convert(date, transdatetime) as TranDate
+  from CreditCardTransactions   group by ReceiptNo, convert(date, transdatetime), nodeno) a on c.CCTID=a.Autoid
+) as CCData on sh.buttontype=4 and t.NodeNo=CCData.NodeNo and t.ReceiptNo=CCData.ReceiptNo and datediff(dd,t.transactiondate,ccdata.trandate)=0
+ 
+left join debtinv di on di.invoiceid=t.InvoiceNo
+ 
+WHERE 
+(t.REVENUEDATE >= @FROM and t.REVENUEDATE <= @TO  And t.FinancialReportCategoryCode <> '')
+and
+(b.bking_id=@bookingid or isnull(@bookingid,0)=0)
+ 
+GROUP BY t.FinancialReportCategoryCode,t.FinancialReportCategoryDescription,t.FinancialReportGroupCode 
+ ,isnull(b.start_date,t.revenuedate) ,  isnull(b.bking_id,0) ,t.ItemId
+,isnull(tl.bking_id,0)
+, convert(date,t.TransactionDate), convert(date, t.RevenueDate),datepart(month, t.RevenueDate),datepart(year, t.RevenueDate), b.start_date, t.ReceiptNo, t.NodeNo, t.ItemCode, t.ItemDescription
+,t.UserName
+ 
+,case when isnull(sh.buttontype,0)=4 then  case when isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1 then 'CreditCard' else
+                           case when isnull(sh.invoice,0)=1 then 'Invoice' else
+                           case when (isnull(sh.cashless,0)=1 or isnull(sh.cashlesstender,0)=1) then 'Giftcard' else 'Other'
+                           end end end
+                           else '' end
+                          
+,case when isnull(sh.buttontype,0)=4 and (isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1) then ccdata.InvoiceNo else '' end
+,case when isnull(sh.buttontype,0)=4 and (isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1)  then CCData.CardType else '' end 
+,case when isnull(sh.buttontype,0)=4 and (isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1)  then CCData.ReceiptText else '' end 
+,case when isnull(sh.buttontype,0)=4 and (isnull(sh.eftpos,0)=1 or isnull(sh.debitcard,0)=1)  then ccdata.AuthCode else '' end 
+ 
+ 
+ 
+,t.InvoiceNo,isnull(di.purchorder,'') ,isnull(di.notes,'')
+ 
+HAVING
+Sum( Credit)-Sum( Debit) <>0
+ 
+ORDER BY
+t.FinancialReportGroupCode,t.FinancialReportCategoryCode, AuditReview,  convert(date,t.TransactionDate)
+ 
+ 
+ 
+ 
+ 
+ 
+END
